@@ -32,3 +32,4 @@
 /Users/vvryya/Library/Mobile Documents/com~apple~CloudDocs/thesis/code/v2/obj/Debug/net9.0/v2.pdb
 /Users/vvryya/Library/Mobile Documents/com~apple~CloudDocs/thesis/code/v2/obj/Debug/net9.0/v2.genruntimeconfig.cache
 /Users/vvryya/Library/Mobile Documents/com~apple~CloudDocs/thesis/code/v2/obj/Debug/net9.0/ref/v2.dll
+/Users/vvryya/Library/Mobile Documents/com~apple~CloudDocs/thesis/code/v2/obj/Debug/net9.0/v2.sourcelink.json

@@ -7,10 +7,9 @@ class CarAgent
 {
     private static readonly Random rand = new Random();
     
-    // Константы наград
     public const float GoalReward = 30.0f;
     public const float ConnectionReward = 0.5f;
-    public const float ConnectionPenalty = -0.1f; // Снижен штраф
+    public const float ConnectionPenalty = -0.1f;
     public const float StabilityBonus = 0.2f;
     public const float GroupConnectivityBonus = 0.3f;
     
@@ -21,8 +20,13 @@ class CarAgent
     public string RoadCondition { get; }
     public float CommunicationRange { get; private set; }
     public float CommunicationReliability { get; private set; }
-    public static float GlobalCommunicationNoise { get; set; } = 0.05f; // Увеличен базовый шум
+    public static float GlobalCommunicationNoise { get; set; } = 0.05f;
     public float SignalQuality { get; private set; } = 1.0f;
+    public CommunicationProtocol Protocol { get; } = new CommunicationProtocol();
+
+    private Dictionary<string, int> directionFailures = new();
+    private Dictionary<int, int> distanceFailures = new();
+    private Dictionary<string, int> conditionFailures = new();
 
     public CarAgent(string name, float startX, float startY, float speed, 
                    float communicationRange, string roadCondition = "clear")
@@ -40,8 +44,8 @@ class CarAgent
     {
         return RoadCondition switch
         {
-            "wet" => 0.9f,  // Улучшена надежность
-            "icy" => 0.8f,   // Улучшена надежность
+            "wet" => 0.9f,
+            "icy" => 0.8f,
             _ => 0.97f
         };
     }
@@ -56,72 +60,50 @@ class CarAgent
 
         float speedMultiplier = RoadCondition switch
         {
-            "wet" => 0.85f, // Уменьшено влияние условий
-            "icy" => 0.75f,  // Уменьшено влияние условий
+            "wet" => 0.85f,
+            "icy" => 0.75f,
             _ => 1.0f
         };
 
         float moveDistance = Math.Min(Speed * speedMultiplier, distance);
         X += (dx / distance) * moveDistance;
         Y += (dy / distance) * moveDistance;
-        
-        // Динамическое обновление качества сигнала
         UpdateSignalQuality(distance);
     }
 
     public bool CanCommunicate(CarAgent other)
     {        
         float distance = GetDistanceTo(other.X, other.Y);
-        
-        // Мягкие границы вместо жестких
-        float maxRange = CommunicationRange * 1.8f; // Увеличиваем максимальный диапазон
-        
-        // Плавная деградация качества связи
+        float maxRange = CommunicationRange * 1.8f;
         float distanceFactor = 1 - MathF.Pow(distance / maxRange, 2.5f);
-        
-        // Учет относительной скорости
         float speedFactor = 1 - Math.Clamp(Math.Abs(Speed - other.Speed) / 5f, 0, 0.3f);
-        
-        // Общее качество связи с адаптацией
         float totalQuality = CommunicationReliability * other.CommunicationReliability 
                         * distanceFactor * speedFactor 
-                        * (1 - GlobalCommunicationNoise * 0.7f); // Уменьшаем влияние шума
+                        * (1 - GlobalCommunicationNoise * 0.7f);
         
-        // Гарантированная связь на близком расстоянии
         if (distance < 8f) return true;
-        
         return rand.NextDouble() < totalQuality * 1.2f;
     }
 
     private float CalculateEnvironmentFactor(CarAgent other)
     {
-        // Имитация препятствий между машинами
         float midX = (X + other.X) / 2;
         float midY = (Y + other.Y) / 2;
-        
-        // Простейшая модель урбанизации (можно заменить на карту плотности)
         float urbanDensity = Math.Clamp((midX - 50)*(midX - 50) + (midY - 50)*(midY - 50), 0, 2500) / 2500f;
-        return 0.7f + 0.3f * (1 - urbanDensity); // От 70% до 100% качества
+        return 0.7f + 0.3f * (1 - urbanDensity);
     }
 
     private void UpdateSignalQuality(float movementDistance)
     {
-        // Качество сигнала ухудшается при быстром движении и улучшается при стабильном положении
         float stabilityFactor = 1 - Math.Clamp(movementDistance / Speed, 0, 0.2f);
         SignalQuality = Math.Clamp(SignalQuality * 0.9f + 0.1f * stabilityFactor, 0.5f, 1.0f);
     }
 
     public void ImproveCommunication(float learningFactor)
     {
-        // Более плавное улучшение характеристик
         float boost = learningFactor > 0.7f ? 0.15f : 0.05f;
-    
-        CommunicationReliability = Math.Min(0.99f, 
-            CommunicationReliability + boost * learningFactor);
-            
+        CommunicationReliability = Math.Min(0.99f, CommunicationReliability + boost * learningFactor);
         CommunicationRange *= 1 + 0.03f * learningFactor;
-        
-        // Адаптация к текущим условиям
         SignalQuality = Math.Min(1.0f, SignalQuality + 0.1f * learningFactor);
     }
 
@@ -131,24 +113,16 @@ class CarAgent
                                     float currentDistance)
     {
         float reward = 0f;
-        
-        // Улучшенная награда за движение
-        reward += MathF.Sign(distanceImprovement) * 
-                MathF.Pow(Math.Abs(distanceImprovement * 2f), 0.6f);
-        
-        // Баланс между связью и движением
         float connectionRate = totalConnectionAttempts > 0 ? 
             successfulConnections / (float)totalConnectionAttempts : 1f;
-        
-        // Динамический вес связи
         float connectionWeight = Math.Clamp(1 - currentDistance/100f, 0.3f, 0.8f);
+        
+        reward += MathF.Sign(distanceImprovement) * MathF.Pow(Math.Abs(distanceImprovement * 2f), 0.6f);
         reward += connectionRate * ConnectionReward * 3f * connectionWeight;
         
-        // Групповые бонусы
         if (successfulConnections >= 2) 
             reward += GroupConnectivityBonus * successfulConnections;
         
-        // Награда за цель с плавным переходом
         if (currentDistance < 2f) reward += GoalReward;
         else if (currentDistance < 15f) reward += GoalReward * (1 - currentDistance/15f);
         
@@ -156,6 +130,58 @@ class CarAgent
     }
 
     public float GetDistanceTo(float x, float y) => MathF.Sqrt((X - x) * (X - x) + (Y - y) * (Y - y));
+
+    public void RegisterConnectionAttempt(CarAgent other, bool success)
+    {
+        if (success || other == null) return;
+
+        float angle = MathF.Atan2(other.Y - Y, other.X - X);
+        string direction = GetDirectionName(angle);
+        directionFailures[direction] = directionFailures.GetValueOrDefault(direction, 0) + 1;
+
+        int distance = (int)GetDistanceTo(other.X, other.Y);
+        distanceFailures[distance] = distanceFailures.GetValueOrDefault(distance, 0) + 1;
+
+        string conditions = $"{RoadCondition}-{other.RoadCondition}";
+        conditionFailures[conditions] = conditionFailures.GetValueOrDefault(conditions, 0) + 1;
+    }
+
+    private string GetDirectionName(float angle)
+    {
+        int sector = (int)((angle + MathF.PI) / (MathF.PI/4)) % 8;
+        return sector switch {
+            0 => "E", 1 => "NE", 2 => "N", 3 => "NW",
+            4 => "W", 5 => "SW", 6 => "S", _ => "SE"
+        };
+    }
+
+    public void AdjustCommunicationParameters()
+    {
+        if (directionFailures.Count > 0)
+        {
+            string worstDirection = directionFailures.MaxBy(kvp => kvp.Value).Key;
+            if (worstDirection == "NE" || worstDirection == "NW")
+                CommunicationRange *= 1.05f;
+        }
+
+        if (distanceFailures.Count > 0)
+        {
+            int worstDistance = distanceFailures.MaxBy(kvp => kvp.Value).Key;
+            if (worstDistance > CommunicationRange * 0.8f)
+                CommunicationReliability = Math.Min(0.99f, CommunicationReliability * 1.03f);
+        }
+    }
+
+    public void ResetConnectionStats()
+    {
+        directionFailures.Clear();
+        distanceFailures.Clear();
+        conditionFailures.Clear();
+    }
+
+    public Dictionary<string, int> GetDirectionStats() => new Dictionary<string, int>(directionFailures);
+    public Dictionary<int, int> GetDistanceStats() => new Dictionary<int, int>(distanceFailures);
+    public Dictionary<string, int> GetConditionStats() => new Dictionary<string, int>(conditionFailures);
 }
 
 class QLearningEnvironment
@@ -167,7 +193,6 @@ class QLearningEnvironment
 
     private float GetAdaptiveLearningRate(float qValueChange)
     {
-        // Адаптивная скорость обучения
         if (qValueChange > 5f) return Math.Min(0.5f, learningRate * 1.2f);
         if (qValueChange < 0.5f) return Math.Max(0.1f, learningRate * 0.9f);
         return learningRate;
@@ -178,7 +203,6 @@ class QLearningEnvironment
         if (random.NextDouble() < explorationRate)
             return actions[random.Next(actions.Count)];
 
-        // Жадный выбор с небольшим случайным шумом
         var bestActions = actions
             .OrderByDescending(a => QTable.GetValueOrDefault($"{state}:{a}", 0))
             .Take(2)
@@ -216,6 +240,26 @@ class QLearningEnvironment
     }
 }
 
+class CommunicationProtocol
+{
+    private float effectiveRange = 80f;
+    private float baseReliability = 0.9f;
+
+    public void UpdateParameters(float currentSuccessRate, int activeConnections)
+    {
+        float congestionFactor = Math.Clamp(activeConnections / 5f, 0.5f, 2f);
+        effectiveRange = 80f * (1 + currentSuccessRate) / congestionFactor;
+        baseReliability = 0.9f * (1 + currentSuccessRate * 0.5f);
+    }
+
+    public bool ShouldAttemptConnection(CarAgent sender, CarAgent receiver)
+    {
+        float distance = sender.GetDistanceTo(receiver.X, receiver.Y);
+        float adjustedRange = effectiveRange * (1 - CarAgent.GlobalCommunicationNoise);
+        return distance < adjustedRange;
+    }
+}
+
 class Program
 {
     static void Main()
@@ -224,21 +268,21 @@ class Program
         var random = new Random();
         string[] roadConditions = { "clear", "wet", "icy" };
 
-        // Параметры симуляции
         int numCars = 20;
         float targetX = 50.0f, targetY = 50.0f;
-        int maxEpisodes = 10000;
+        int maxEpisodes = 5000;
         int maxStepsPerEpisode = 100;
         int numRuns = 5;
 
-        // Данные для анализа
         var allEpisodeRewards = new List<List<float>>();
         var allAverageQValues = new List<List<float>>();
-        var allCommunicationBlockingProbabilities = new List<List<float>>();
+        var allBlockingProbabilities = new List<List<float>>();
+        var allDirectionStats = new List<List<(string, int)>>();
+        var allDistanceStats = new List<List<(int, int)>>();
+        var allConditionStats = new List<List<(string, int)>>();
 
-        // Адаптивные параметры
         float initialExplorationRate = 1.0f;
-        float explorationDecay = 0.997f; // Более быстрое уменьшение
+        float explorationDecay = 0.997f;
         float minExplorationRate = 0.05f;
 
         for (int run = 0; run < numRuns; run++)
@@ -247,23 +291,26 @@ class Program
             var episodeRewards = new List<float>();
             var averageQValues = new List<float>();
             var blockingProbabilities = new List<float>();
+            var runDirectionStats = new List<(string, int)>();
+            var runDistanceStats = new List<(int, int)>();
+            var runConditionStats = new List<(string, int)>();
 
             float currentExplorationRate = initialExplorationRate;
             float adaptiveNoise = 0.05f;
 
             for (int episode = 0; episode < maxEpisodes; episode++)
             {
-                // Адаптация уровня шума
                 if (episode % 200 == 0 && episode > 1000)
                 {
                     float successRate = 1 - (blockingProbabilities.Count > 0 ? 
                         blockingProbabilities.Average() : 0);
-                    adaptiveNoise = 0.03f + Math.Min(0.15f, episode / 20000f) * (1 - Math.Clamp(env.GetAverageQValue()/100f, 0, 1));
+                    adaptiveNoise = 0.03f + Math.Min(0.15f, episode / 20000f) * 
+                        (1 - Math.Clamp(env.GetAverageQValue()/100f, 0, 1));
                     CarAgent.GlobalCommunicationNoise = adaptiveNoise;
 
                     explorationDecay = episode < 3000 ? 0.998f : 0.999f;
                     currentExplorationRate = Math.Max(minExplorationRate, 
-                                currentExplorationRate * explorationDecay);
+                        currentExplorationRate * explorationDecay);
                                 
                     if (episode % 1000 == 0)
                     {
@@ -278,15 +325,22 @@ class Program
                         random.Next(0, 100), 
                         random.Next(0, 100), 
                         1.2f, 
-                        85f, // Увеличен диапазон
+                        85f,
                         roadConditions[random.Next(roadConditions.Length)]))
                     .ToList();
 
-                // Обновление параметров связи
                 if (episode % 100 == 0)
                 {
-                    float learningProgress = Math.Clamp(episode / (float)maxEpisodes, 0, 1);
-                    cars.ForEach(c => c.ImproveCommunication(learningProgress));
+                    float successRate = 1 - (blockingProbabilities.Count > 0 ? 
+                        blockingProbabilities.Average() : 0);
+                    foreach (var car in cars)
+                    {
+                        if (car.GetDirectionStats().Count > 0 || car.GetDistanceStats().Count > 0)
+                        {
+                            car.AdjustCommunicationParameters();
+                        }
+                        car.Protocol.UpdateParameters(successRate, cars.Count - 1);
+                    }
                 }
 
                 int totalConnections = 0, failedConnections = 0;
@@ -308,18 +362,23 @@ class Program
                         car.MoveTowards(newX, newY);
                         float distanceAfter = car.GetDistanceTo(targetX, targetY);
 
-                        // Обработка связей
                         var nearbyCars = cars
                             .Where(c => c != car && car.GetDistanceTo(c.X, c.Y) < car.CommunicationRange)
-                            .Take(5) // Увеличен радиус взаимодействия
+                            .Take(5)
                             .ToList();
 
                         int successfulConnections = 0;
                         foreach (var other in nearbyCars)
                         {
-                            stepConnections++;
-                            if (car.CanCommunicate(other)) successfulConnections++;
-                            else stepFailures++;
+                            bool canCommunicate = car.CanCommunicate(other);
+                            car.RegisterConnectionAttempt(other, canCommunicate);
+
+                            if (car.Protocol.ShouldAttemptConnection(car, other))
+                            {
+                                stepConnections++;
+                                if (canCommunicate) successfulConnections++;
+                                else stepFailures++;
+                            }
                         }
 
                         float reward = car.CalculateCompositeReward(
@@ -338,11 +397,10 @@ class Program
                     failedConnections += stepFailures;
                     totalReward += stepReward;
 
-                    if (cars.All(c => c.GetDistanceTo(targetX, targetY) < 3f)) // Более мягкий критерий
+                    if (cars.All(c => c.GetDistanceTo(targetX, targetY) < 3f))
                         break;
                 }
 
-                // Сохранение статистики
                 episodeRewards.Add(totalReward);
                 averageQValues.Add(env.GetAverageQValue());
                 
@@ -352,8 +410,16 @@ class Program
                 currentExplorationRate = Math.Max(minExplorationRate, 
                     currentExplorationRate * explorationDecay);
 
-                if (episode % 500 == 0)
+                if (episode % 500 == 0 || episode == maxEpisodes - 1)
                 {
+                    foreach (var car in cars)
+                    {
+                        runDirectionStats.AddRange(car.GetDirectionStats().Select(kvp => (kvp.Key, kvp.Value)));
+                        runDistanceStats.AddRange(car.GetDistanceStats().Select(kvp => (kvp.Key, kvp.Value)));
+                        runConditionStats.AddRange(car.GetConditionStats().Select(kvp => (kvp.Key, kvp.Value)));
+                        car.ResetConnectionStats();
+                    }
+
                     float avgBlocking = blockingProbabilities.Count > 0 ? 
                         blockingProbabilities.Average() : 0;
                     Console.WriteLine($"Episode {episode}: " +
@@ -366,13 +432,18 @@ class Program
 
             allEpisodeRewards.Add(episodeRewards);
             allAverageQValues.Add(averageQValues);
-            allCommunicationBlockingProbabilities.Add(blockingProbabilities);
+            allBlockingProbabilities.Add(blockingProbabilities);
+            allDirectionStats.Add(runDirectionStats);
+            allDistanceStats.Add(runDistanceStats);
+            allConditionStats.Add(runConditionStats);
         }
 
-        // Сохранение данных (аналогично оригинальному коду)
-        SaveDataToCsv("rewards.csv", CalculateAverages(allEpisodeRewards));
-        SaveDataToCsv("qvalues.csv", CalculateAverages(allAverageQValues));
-        SaveDataToCsv("blocking.csv", CalculateAverages(allCommunicationBlockingProbabilities));
+        SaveDataToCsv("iteration_rewards.csv", CalculateAverages(allEpisodeRewards));
+        SaveDataToCsv("average_q_values.csv", CalculateAverages(allAverageQValues));
+        SaveDataToCsv("blocking_probabilities.csv", CalculateAverages(allBlockingProbabilities));
+        SaveConnectionStats("direction_failures.csv", allDirectionStats);
+        SaveConnectionStats("distance_failures.csv", allDistanceStats);
+        SaveConnectionStats("condition_failures.csv", allConditionStats);
         
         env.SaveQTableToFile("q_table.csv");
         Console.WriteLine("Training completed. Data saved to CSV files.");
@@ -389,7 +460,6 @@ class Program
         float dy = targetY - car.Y;
         float dist = MathF.Sqrt(dx*dx + dy*dy);
 
-        // Добавляем целенаправленные действия
         if (dist > 20f) {
             actions.Add($"fast-{(dx > 0 ? "right" : "left")}");
             actions.Add($"fast-{(dy > 0 ? "up" : "down")}");
@@ -421,7 +491,6 @@ class Program
         };
     }
 
-    // Методы CalculateAverages и SaveDataToCsv остаются без изменений
     static List<float> CalculateAverages(List<List<float>> data) 
     { 
         return data
@@ -430,14 +499,34 @@ class Program
             .Select(g => g.Average(x => x.value))
             .ToList();
     }
+
     static void SaveDataToCsv(string filePath, List<float> data) 
     {  
         using (var writer = new StreamWriter(filePath))
         {
-            writer.WriteLine("Итерация,Значение");
+            writer.WriteLine("Iteration,Value");
             for (int i = 0; i < data.Count; i++)
             {
                 writer.WriteLine($"{i},{data[i]}");
+            }
+        }
+    }
+
+    static void SaveConnectionStats<T>(string filePath, List<List<(T parameter, int failures)>> allStats)
+    {
+        var groupedStats = allStats
+            .SelectMany(inner => inner)
+            .GroupBy(x => x.parameter)
+            .OrderBy(g => g.Key.ToString())
+            .ToList();
+
+        using (var writer = new StreamWriter(filePath))
+        {
+            writer.WriteLine($"Parameter,AverageFailures,MinFailures,MaxFailures");
+            foreach (var group in groupedStats)
+            {
+                var failures = group.Select(x => x.failures).ToList();
+                writer.WriteLine($"{group.Key},{failures.Average()},{failures.Min()},{failures.Max()}");
             }
         }
     }
