@@ -3,16 +3,19 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 
+// Класс, моделирующий поведение агента
 class CarAgent
 {
     private static readonly Random rand = new Random();
-    
+
+    // Константы наград и штрафов   
     public const float GoalReward = 30.0f;
     public const float ConnectionReward = 0.5f;
     public const float ConnectionPenalty = -0.1f;
     public const float StabilityBonus = 0.2f;
     public const float GroupConnectivityBonus = 0.3f;
     
+    // Основные свойства агента
     public string Name { get; }
     public float X { get; private set; }
     public float Y { get; private set; }
@@ -24,6 +27,7 @@ class CarAgent
     public float SignalQuality { get; private set; } = 1.0f;
     public CommunicationProtocol Protocol { get; } = new CommunicationProtocol();
 
+    // Статистика сбоев соединений
     private Dictionary<string, int> directionFailures = new();
     private Dictionary<int, int> distanceFailures = new();
     private Dictionary<string, int> conditionFailures = new();
@@ -50,6 +54,7 @@ class CarAgent
         };
     }
 
+    // Перемещение агента в сторону цели
     public void MoveTowards(float targetX, float targetY)
     {
         float dx = targetX - X;
@@ -71,6 +76,7 @@ class CarAgent
         UpdateSignalQuality(distance);
     }
 
+    // Проверка возможности связи между двумя агентами
     public bool CanCommunicate(CarAgent other)
     {        
         float distance = GetDistanceTo(other.X, other.Y);
@@ -85,32 +91,13 @@ class CarAgent
         return rand.NextDouble() < totalQuality * 1.2f;
     }
 
-    private float CalculateEnvironmentFactor(CarAgent other)
-    {
-        float midX = (X + other.X) / 2;
-        float midY = (Y + other.Y) / 2;
-        float urbanDensity = Math.Clamp((midX - 50)*(midX - 50) + (midY - 50)*(midY - 50), 0, 2500) / 2500f;
-        return 0.7f + 0.3f * (1 - urbanDensity);
-    }
-
     private void UpdateSignalQuality(float movementDistance)
     {
         float stabilityFactor = 1 - Math.Clamp(movementDistance / Speed, 0, 0.2f);
         SignalQuality = Math.Clamp(SignalQuality * 0.9f + 0.1f * stabilityFactor, 0.5f, 1.0f);
     }
 
-    public void ImproveCommunication(float learningFactor)
-    {
-        float boost = learningFactor > 0.7f ? 0.15f : 0.05f;
-        CommunicationReliability = Math.Min(0.99f, CommunicationReliability + boost * learningFactor);
-        CommunicationRange *= 1 + 0.03f * learningFactor;
-        SignalQuality = Math.Min(1.0f, SignalQuality + 0.1f * learningFactor);
-    }
-
-    public float CalculateCompositeReward(float distanceImprovement, 
-                                    int successfulConnections, 
-                                    int totalConnectionAttempts,
-                                    float currentDistance)
+    public float CalculateCompositeReward(float distanceImprovement, int successfulConnections, int totalConnectionAttempts, float currentDistance)
     {
         float reward = 0f;
         float connectionRate = totalConnectionAttempts > 0 ? 
@@ -184,6 +171,7 @@ class CarAgent
     public Dictionary<string, int> GetConditionStats() => new Dictionary<string, int>(conditionFailures);
 }
 
+// Класс, отвечающий за реализацию Q-обучения
 class QLearningEnvironment
 {
     private readonly Dictionary<string, float> QTable = new();
@@ -211,6 +199,7 @@ class QLearningEnvironment
         return bestActions[random.Next(bestActions.Count)];
     }
 
+    // Метод обновления Q-значения
     public void UpdateQValue(string state, string action, float reward, string nextState, List<string> actions)
     {
         string key = $"{state}:{action}";
@@ -224,22 +213,9 @@ class QLearningEnvironment
     }
 
     public float GetAverageQValue() => QTable.Count == 0 ? 0 : QTable.Values.Average();
-
-    public void SaveQTableToFile(string filePath)
-    {
-        var sortedQTable = QTable.OrderBy(kvp => kvp.Key).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        
-        using (var writer = new StreamWriter(filePath))
-        {
-            writer.WriteLine("State:Action,QValue");
-            foreach (var entry in sortedQTable)
-            {
-                writer.WriteLine($"{entry.Key},{entry.Value}");
-            }
-        }
-    }
 }
 
+// Класс, моделирующий параметры протокола связи
 class CommunicationProtocol
 {
     private float effectiveRange = 80f;
@@ -264,10 +240,12 @@ class Program
 {
     static void Main()
     {
+        // Создание среды с Q-обучением
         var env = new QLearningEnvironment();
         var random = new Random();
         string[] roadConditions = { "clear", "wet", "icy" };
 
+        // Параметры симуляции
         int numCars = 20;
         float targetX = 50.0f, targetY = 50.0f;
         int maxEpisodes = 5000;
@@ -285,9 +263,9 @@ class Program
         float explorationDecay = 0.997f;
         float minExplorationRate = 0.05f;
 
+        // Запуск серии симуляций
         for (int run = 0; run < numRuns; run++)
         {
-            Console.WriteLine($"Run {run + 1}/{numRuns}");
             var episodeRewards = new List<float>();
             var averageQValues = new List<float>();
             var blockingProbabilities = new List<float>();
@@ -298,6 +276,7 @@ class Program
             float currentExplorationRate = initialExplorationRate;
             float adaptiveNoise = 0.05f;
 
+            // Основной цикл по эпизодам
             for (int episode = 0; episode < maxEpisodes; episode++)
             {
                 if (episode % 200 == 0 && episode > 1000)
@@ -318,7 +297,8 @@ class Program
                         targetY = 30 + random.Next(40);
                     }
                 }
-
+                
+                // Инициализация агентов для эпизода
                 var cars = Enumerable.Range(0, numCars)
                     .Select(i => new CarAgent(
                         $"Car{i}", 
@@ -422,11 +402,6 @@ class Program
 
                     float avgBlocking = blockingProbabilities.Count > 0 ? 
                         blockingProbabilities.Average() : 0;
-                    Console.WriteLine($"Episode {episode}: " +
-                        $"Reward={totalReward:F1} " +
-                        $"AvgQ={env.GetAverageQValue():F2} " +
-                        $"Blocking={avgBlocking:P1} " +
-                        $"Noise={adaptiveNoise:P0}");
                 }
             }
 
@@ -438,17 +413,16 @@ class Program
             allConditionStats.Add(runConditionStats);
         }
 
+        // Сохранение результатов 
         SaveDataToCsv("iteration_rewards.csv", CalculateAverages(allEpisodeRewards));
         SaveDataToCsv("average_q_values.csv", CalculateAverages(allAverageQValues));
         SaveDataToCsv("blocking_probabilities.csv", CalculateAverages(allBlockingProbabilities));
         SaveConnectionStats("direction_failures.csv", allDirectionStats);
         SaveConnectionStats("distance_failures.csv", allDistanceStats);
         SaveConnectionStats("condition_failures.csv", allConditionStats);
-        
-        env.SaveQTableToFile("q_table.csv");
-        Console.WriteLine("Training completed. Data saved to CSV files.");
     }
 
+    // Метод получения возможных действий автомобиля
     static List<string> GetEnhancedActions(CarAgent car, float targetX, float targetY)
     {
         var actions = new List<string> { 
@@ -472,6 +446,7 @@ class Program
         return actions;
     }
 
+    // Метод вычисления новой позиции автомобиля после выполнения действия
     static (float, float) GetNewPosition(CarAgent car, string action)
     {
         float step = action.StartsWith("fast") ? 1.5f : 
@@ -491,6 +466,7 @@ class Program
         };
     }
 
+    // Метод расчета средних значений по данным
     static List<float> CalculateAverages(List<List<float>> data) 
     { 
         return data
@@ -500,6 +476,7 @@ class Program
             .ToList();
     }
 
+    // Метод сохранения данных в CSV
     static void SaveDataToCsv(string filePath, List<float> data) 
     {  
         using (var writer = new StreamWriter(filePath))
@@ -512,6 +489,7 @@ class Program
         }
     }
 
+    // Метод сохранения статистики соединений в CSV
     static void SaveConnectionStats<T>(string filePath, List<List<(T parameter, int failures)>> allStats)
     {
         var groupedStats = allStats
