@@ -27,10 +27,10 @@ class CarAgent
     public float SignalQuality { get; private set; } = 1.0f;
     public CommunicationProtocol Protocol { get; } = new CommunicationProtocol();
 
-    // Статистика сбоев соединений
-    private Dictionary<string, int> directionFailures = new();
-    private Dictionary<int, int> distanceFailures = new();
-    private Dictionary<string, int> conditionFailures = new();
+    // Обновленная статистика соединений (попытки, успехи, неудачи)
+    private Dictionary<string, (int attempts, int successes, int failures)> directionStats = new();
+    private Dictionary<int, (int attempts, int successes, int failures)> distanceStats = new();
+    private Dictionary<string, (int attempts, int successes, int failures)> conditionStats = new();
 
     public CarAgent(string name, float startX, float startY, float speed, 
                    float communicationRange, string roadCondition = "clear")
@@ -118,19 +118,34 @@ class CarAgent
 
     public float GetDistanceTo(float x, float y) => MathF.Sqrt((X - x) * (X - x) + (Y - y) * (Y - y));
 
+    // Обновленный метод регистрации попытки соединения
     public void RegisterConnectionAttempt(CarAgent other, bool success)
     {
-        if (success || other == null) return;
+        if (other == null) return;
 
+        // Направление
         float angle = MathF.Atan2(other.Y - Y, other.X - X);
         string direction = GetDirectionName(angle);
-        directionFailures[direction] = directionFailures.GetValueOrDefault(direction, 0) + 1;
+        UpdateStats(directionStats, direction, success);
 
+        // Расстояние
         int distance = (int)GetDistanceTo(other.X, other.Y);
-        distanceFailures[distance] = distanceFailures.GetValueOrDefault(distance, 0) + 1;
+        UpdateStats(distanceStats, distance, success);
 
+        // Дорожные условия
         string conditions = $"{RoadCondition}-{other.RoadCondition}";
-        conditionFailures[conditions] = conditionFailures.GetValueOrDefault(conditions, 0) + 1;
+        UpdateStats(conditionStats, conditions, success);
+    }
+
+    // Вспомогательный метод для обновления статистики
+    private void UpdateStats<T>(Dictionary<T, (int attempts, int successes, int failures)> statsDict, T key, bool success)
+    {
+        var current = statsDict.GetValueOrDefault(key, (attempts: 0, successes: 0, failures: 0));
+        statsDict[key] = (
+            attempts: current.attempts + 1,
+            successes: current.successes + (success ? 1 : 0),
+            failures: current.failures + (success ? 0 : 1)
+        );
     }
 
     private string GetDirectionName(float angle)
@@ -144,31 +159,31 @@ class CarAgent
 
     public void AdjustCommunicationParameters()
     {
-        if (directionFailures.Count > 0)
+        if (directionStats.Count > 0)
         {
-            string worstDirection = directionFailures.MaxBy(kvp => kvp.Value).Key;
-            if (worstDirection == "NE" || worstDirection == "NW")
+            var worstDirection = directionStats.MaxBy(kvp => kvp.Value.failures);
+            if (worstDirection.Key == "NE" || worstDirection.Key == "NW")
                 CommunicationRange *= 1.05f;
         }
 
-        if (distanceFailures.Count > 0)
+        if (distanceStats.Count > 0)
         {
-            int worstDistance = distanceFailures.MaxBy(kvp => kvp.Value).Key;
-            if (worstDistance > CommunicationRange * 0.8f)
+            var worstDistance = distanceStats.MaxBy(kvp => kvp.Value.failures);
+            if (worstDistance.Key > CommunicationRange * 0.8f)
                 CommunicationReliability = Math.Min(0.99f, CommunicationReliability * 1.03f);
         }
     }
 
     public void ResetConnectionStats()
     {
-        directionFailures.Clear();
-        distanceFailures.Clear();
-        conditionFailures.Clear();
+        directionStats.Clear();
+        distanceStats.Clear();
+        conditionStats.Clear();
     }
 
-    public Dictionary<string, int> GetDirectionStats() => new Dictionary<string, int>(directionFailures);
-    public Dictionary<int, int> GetDistanceStats() => new Dictionary<int, int>(distanceFailures);
-    public Dictionary<string, int> GetConditionStats() => new Dictionary<string, int>(conditionFailures);
+    public Dictionary<string, (int attempts, int successes, int failures)> GetDirectionStats() => new(directionStats);
+    public Dictionary<int, (int attempts, int successes, int failures)> GetDistanceStats() => new(distanceStats);
+    public Dictionary<string, (int attempts, int successes, int failures)> GetConditionStats() => new(conditionStats);
 }
 
 // Класс, отвечающий за реализацию Q-обучения
@@ -199,7 +214,6 @@ class QLearningEnvironment
         return bestActions[random.Next(bestActions.Count)];
     }
 
-    // Метод обновления Q-значения
     public void UpdateQValue(string state, string action, float reward, string nextState, List<string> actions)
     {
         string key = $"{state}:{action}";
@@ -240,12 +254,10 @@ class Program
 {
     static void Main()
     {
-        // Создание среды с Q-обучением
         var env = new QLearningEnvironment();
         var random = new Random();
         string[] roadConditions = { "clear", "wet", "icy" };
 
-        // Параметры симуляции
         int numCars = 20;
         float targetX = 50.0f, targetY = 50.0f;
         int maxEpisodes = 5000;
@@ -255,28 +267,29 @@ class Program
         var allEpisodeRewards = new List<List<float>>();
         var allAverageQValues = new List<List<float>>();
         var allBlockingProbabilities = new List<List<float>>();
-        var allDirectionStats = new List<List<(string, int)>>();
-        var allDistanceStats = new List<List<(int, int)>>();
-        var allConditionStats = new List<List<(string, int)>>();
+        
+        // Обновленные структуры для хранения статистики
+        var allDirectionStats = new List<List<(string, int, int, int)>>();
+        var allDistanceStats = new List<List<(int, int, int, int)>>();
+        var allConditionStats = new List<List<(string, int, int, int)>>();
 
         float initialExplorationRate = 1.0f;
         float explorationDecay = 0.997f;
         float minExplorationRate = 0.05f;
 
-        // Запуск серии симуляций
         for (int run = 0; run < numRuns; run++)
         {
             var episodeRewards = new List<float>();
             var averageQValues = new List<float>();
             var blockingProbabilities = new List<float>();
-            var runDirectionStats = new List<(string, int)>();
-            var runDistanceStats = new List<(int, int)>();
-            var runConditionStats = new List<(string, int)>();
+            
+            var runDirectionStats = new List<(string, int, int, int)>();
+            var runDistanceStats = new List<(int, int, int, int)>();
+            var runConditionStats = new List<(string, int, int, int)>();
 
             float currentExplorationRate = initialExplorationRate;
             float adaptiveNoise = 0.05f;
 
-            // Основной цикл по эпизодам
             for (int episode = 0; episode < maxEpisodes; episode++)
             {
                 if (episode % 200 == 0 && episode > 1000)
@@ -298,7 +311,6 @@ class Program
                     }
                 }
                 
-                // Инициализация агентов для эпизода
                 var cars = Enumerable.Range(0, numCars)
                     .Select(i => new CarAgent(
                         $"Car{i}", 
@@ -394,14 +406,20 @@ class Program
                 {
                     foreach (var car in cars)
                     {
-                        runDirectionStats.AddRange(car.GetDirectionStats().Select(kvp => (kvp.Key, kvp.Value)));
-                        runDistanceStats.AddRange(car.GetDistanceStats().Select(kvp => (kvp.Key, kvp.Value)));
-                        runConditionStats.AddRange(car.GetConditionStats().Select(kvp => (kvp.Key, kvp.Value)));
+                        foreach (var kvp in car.GetDirectionStats())
+                        {
+                            runDirectionStats.Add((kvp.Key, kvp.Value.attempts, kvp.Value.successes, kvp.Value.failures));
+                        }
+                        foreach (var kvp in car.GetDistanceStats())
+                        {
+                            runDistanceStats.Add((kvp.Key, kvp.Value.attempts, kvp.Value.successes, kvp.Value.failures));
+                        }
+                        foreach (var kvp in car.GetConditionStats())
+                        {
+                            runConditionStats.Add((kvp.Key, kvp.Value.attempts, kvp.Value.successes, kvp.Value.failures));
+                        }
                         car.ResetConnectionStats();
                     }
-
-                    float avgBlocking = blockingProbabilities.Count > 0 ? 
-                        blockingProbabilities.Average() : 0;
                 }
             }
 
@@ -413,16 +431,16 @@ class Program
             allConditionStats.Add(runConditionStats);
         }
 
-        // Сохранение результатов 
         SaveDataToCsv("iteration_rewards.csv", CalculateAverages(allEpisodeRewards));
         SaveDataToCsv("average_q_values.csv", CalculateAverages(allAverageQValues));
         SaveDataToCsv("blocking_probabilities.csv", CalculateAverages(allBlockingProbabilities));
-        SaveConnectionStats("direction_failures.csv", allDirectionStats);
-        SaveConnectionStats("distance_failures.csv", allDistanceStats);
-        SaveConnectionStats("condition_failures.csv", allConditionStats);
+        
+        // Сохранение новой статистики
+        SaveConnectionStats("direction_stats.csv", allDirectionStats);
+        SaveConnectionStats("distance_stats.csv", allDistanceStats);
+        SaveConnectionStats("condition_stats.csv", allConditionStats);
     }
 
-    // Метод получения возможных действий автомобиля
     static List<string> GetEnhancedActions(CarAgent car, float targetX, float targetY)
     {
         var actions = new List<string> { 
@@ -446,7 +464,6 @@ class Program
         return actions;
     }
 
-    // Метод вычисления новой позиции автомобиля после выполнения действия
     static (float, float) GetNewPosition(CarAgent car, string action)
     {
         float step = action.StartsWith("fast") ? 1.5f : 
@@ -466,7 +483,6 @@ class Program
         };
     }
 
-    // Метод расчета средних значений по данным
     static List<float> CalculateAverages(List<List<float>> data) 
     { 
         return data
@@ -476,7 +492,6 @@ class Program
             .ToList();
     }
 
-    // Метод сохранения данных в CSV
     static void SaveDataToCsv(string filePath, List<float> data) 
     {  
         using (var writer = new StreamWriter(filePath))
@@ -489,22 +504,28 @@ class Program
         }
     }
 
-    // Метод сохранения статистики соединений в CSV
-    static void SaveConnectionStats<T>(string filePath, List<List<(T parameter, int failures)>> allStats)
+    // Новый метод для сохранения статистики соединений
+    static void SaveConnectionStats<T>(string filePath, List<List<(T parameter, int attempts, int successes, int failures)>> allStats)
     {
         var groupedStats = allStats
             .SelectMany(inner => inner)
             .GroupBy(x => x.parameter)
             .OrderBy(g => g.Key.ToString())
+            .Select(g => (
+                parameter: g.Key,
+                attempts: g.Sum(x => x.attempts),
+                successes: g.Sum(x => x.successes),
+                failures: g.Sum(x => x.failures),
+                blockingPercent: (float)g.Sum(x => x.failures) / g.Sum(x => x.attempts) * 100
+            ))
             .ToList();
 
         using (var writer = new StreamWriter(filePath))
         {
-            writer.WriteLine($"Parameter,AverageFailures,MinFailures,MaxFailures");
-            foreach (var group in groupedStats)
+            writer.WriteLine("Parameter,Attempts,Successes,Failures,BlockingPercent");
+            foreach (var stat in groupedStats)
             {
-                var failures = group.Select(x => x.failures).ToList();
-                writer.WriteLine($"{group.Key},{failures.Average()},{failures.Min()},{failures.Max()}");
+                writer.WriteLine($"{stat.parameter},{stat.attempts},{stat.successes},{stat.failures},{stat.blockingPercent:F2}");
             }
         }
     }
