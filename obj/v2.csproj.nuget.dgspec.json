@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/Users/vvryya/Library/Mobile Documents/com~apple~CloudDocs/thesis/code/v2/v2.csproj": {}
+    "/Users/vvryya/Documents/thesis/code/v2/v2.csproj": {}
   },
   "projects": {
-    "/Users/vvryya/Library/Mobile Documents/com~apple~CloudDocs/thesis/code/v2/v2.csproj": {
+    "/Users/vvryya/Documents/thesis/code/v2/v2.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/vvryya/Library/Mobile Documents/com~apple~CloudDocs/thesis/code/v2/v2.csproj",
+        "projectUniqueName": "/Users/vvryya/Documents/thesis/code/v2/v2.csproj",
         "projectName": "v2",
-        "projectPath": "/Users/vvryya/Library/Mobile Documents/com~apple~CloudDocs/thesis/code/v2/v2.csproj",
+        "projectPath": "/Users/vvryya/Documents/thesis/code/v2/v2.csproj",
         "packagesPath": "/Users/vvryya/.nuget/packages/",
-        "outputPath": "/Users/vvryya/Library/Mobile Documents/com~apple~CloudDocs/thesis/code/v2/obj/",
+        "outputPath": "/Users/vvryya/Documents/thesis/code/v2/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/Users/vvryya/.nuget/NuGet/NuGet.Config"

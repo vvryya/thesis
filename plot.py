@@ -5,26 +5,10 @@ import os
 import matplotlib.colors as mcolors
 
 # Проверка и загрузка данных для графиков обучения
-'''if not os.path.exists('iteration_rewards.csv'):
-    print("Файл iteration_rewards.csv не найден!")
-else:
-    rewards = pd.read_csv('iteration_rewards.csv')
-    plt.figure(figsize=(12, 6))
-    plt.plot(rewards['Iteration'], rewards['Value'], color='blue')
-    #plt.title('Динамика награды по эпизодам')
-    plt.xlabel('Эпизод', fontsize=18)
-    plt.ylabel('Награда', fontsize=18)
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig('rewards_curve.png')
-    plt.show()'''
-
-
-
-if not os.path.exists('average_q_values.csv'):
+if not os.path.exists('bin/Debug/net9.0/average_q_values.csv'):
     print("Файл average_q_values.csv не найден!")
 else:
-    q_values = pd.read_csv('average_q_values.csv')
+    q_values = pd.read_csv('bin/Debug/net9.0/average_q_values.csv')
     plt.figure(figsize=(12, 6))
     plt.plot(q_values['Iteration'], q_values['Value'], color='green')
     #plt.title('Средние Q-значения по эпизодам')
@@ -37,10 +21,10 @@ else:
     plt.savefig('q_values_curve.png')
     plt.show()
 
-if not os.path.exists('blocking_probabilities.csv'):
+if not os.path.exists('bin/Debug/net9.0/blocking_probabilities.csv'):
     print("Файл blocking_probabilities.csv не найден!")
 else:
-    blocking = pd.read_csv('blocking_probabilities.csv')
+    blocking = pd.read_csv('bin/Debug/net9.0/blocking_probabilities.csv')
     plt.figure(figsize=(12, 6))
     plt.plot(blocking['Iteration'], blocking['Value']*100, color='blue')
     #plt.title('Процент блокировок связи по эпизодам')
@@ -57,10 +41,10 @@ else:
 # Проверка и загрузка данных для статистики связи
 # Для направлений (direction_stats)
 # 1. График направлений (красный #ED1C23)
-if not os.path.exists('direction_stats.csv'):
+if not os.path.exists('bin/Debug/net9.0/direction_stats.csv'):
     print("Файл direction_stats.csv не найден!")
 else:
-    direction = pd.read_csv('direction_stats.csv')
+    direction = pd.read_csv('bin/Debug/net9.0/direction_stats.csv')
     plt.figure(figsize=(12, 6))
     
     # Исправленная строка - используем mcolors вместо plt.colors
@@ -79,10 +63,10 @@ else:
     plt.show()
 
 # 2. График расстояний (синий #005A9B)
-if not os.path.exists('distance_stats.csv'):
+if not os.path.exists('bin/Debug/net9.0/distance_stats.csv'):
     print("Файл distance_stats.csv не найден!")
 else:
-    distance = pd.read_csv('distance_stats.csv')
+    distance = pd.read_csv('bin/Debug/net9.0/distance_stats.csv')
     distance_top = distance.sort_values('BlockingPercent', ascending=False).head(10)
     plt.figure(figsize=(12, 6))
     
@@ -102,10 +86,10 @@ else:
     plt.show()
 
 # 3. График условий дороги (зеленый #01A94F)
-if not os.path.exists('condition_stats.csv'):
+if not os.path.exists('bin/Debug/net9.0/condition_stats.csv'):
     print("Файл condition_stats.csv не найден!")
 else:
-    condition = pd.read_csv('condition_stats.csv')
+    condition = pd.read_csv('bin/Debug/net9.0/condition_stats.csv')
     plt.figure(figsize=(12, 6))
     
     # Исправленная строка
@@ -122,28 +106,3 @@ else:
     plt.tight_layout()
     plt.savefig('condition_failures.png', dpi=300, bbox_inches='tight')
     plt.show()
-'''# 3D визуализация качества связи
-try:
-    from mpl_toolkits.mplot3d import Axes3D
-    
-    # Создаем тестовые данные (замените на загрузку из вашего файла)
-    np.random.seed(42)
-    x = np.random.rand(100) * 100
-    y = np.random.rand(100) * 100
-    z = np.random.rand(100) * 100  # Качество связи
-    
-    fig = plt.figure(figsize=(12, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    
-    sc = ax.scatter(x, y, z, c=z, cmap='viridis', marker='o')
-    ax.set_title('3D карта качества связи')
-    ax.set_xlabel('X координата')
-    ax.set_ylabel('Y координата')
-    ax.set_zlabel('Качество связи')
-    
-    fig.colorbar(sc, label='Уровень сигнала')
-    plt.savefig('3d_communication_map.png')
-    plt.show()
-
-except ImportError:
-    print("Для 3D графиков требуется mpl_toolkits")'''
